@@ -2,6 +2,8 @@
 
 import React, { useState, useRef } from 'react';
 import { Upload, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import Papa from 'papaparse';
 import { Button } from '@/components/ui/button';
 import { UploadedDataset, S3UploadResponse } from '@/lib/types';
 
@@ -42,23 +44,49 @@ export default function FileUploadFlow({ sessionId, onDatasetAdded }: FileUpload
     setUploadStatus('idle');
 
     try {
-      // Parse file client-side (demo mode)
-      const fileContent = await file.text();
-      const rows = fileContent.split('\n').filter(row => row.trim());
-      
-      if (rows.length === 0) {
-        throw new Error('File is empty');
-      }
+      let dataRows: Record<string, any>[] = [];
+      let headers: string[] = [];
 
-      // Parse CSV headers
-      const headers = rows[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
-      const dataRows = rows.slice(1).map(row => {
-        const values = row.split(',').map(v => v.trim().replace(/^["']|["']$/g, ''));
-        return headers.reduce((obj: Record<string, string>, header: string, idx: number) => {
-          obj[header] = values[idx] || '';
-          return obj;
-        }, {});
-      });
+      // Determine file type and parse accordingly
+      const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls') || file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || file.type === 'application/vnd.ms-excel';
+      
+      if (isExcel) {
+        // Parse Excel file using XLSX
+        const arrayBuffer = await file.arrayBuffer();
+        const workbook = XLSX.read(arrayBuffer);
+        
+        if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+          throw new Error('Excel file contains no sheets');
+        }
+
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+        const excelData = XLSX.utils.sheet_to_json<Record<string, any>>(firstSheet, { defval: '' });
+
+        if (excelData.length === 0) {
+          throw new Error('Excel sheet is empty');
+        }
+
+        headers = Object.keys(excelData[0]);
+        dataRows = excelData;
+      } else {
+        // Parse CSV file using Papa Parse
+        const fileContent = await file.text();
+        const results = await new Promise<Papa.ParseResult<Record<string, any>>>((resolve, reject) => {
+          Papa.parse(fileContent, {
+            header: true,
+            skipEmptyLines: true,
+            complete: (results) => resolve(results),
+            error: (error: any) => reject(error),
+          });
+        });
+
+        if (!results.data || results.data.length === 0) {
+          throw new Error('CSV file is empty');
+        }
+
+        dataRows = results.data;
+        headers = Object.keys(dataRows[0]);
+      }
 
       // Create dataset from parsed data
       const datasetId = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -78,7 +106,7 @@ export default function FileUploadFlow({ sessionId, onDatasetAdded }: FileUpload
       onDatasetAdded(mockDataset);
 
       setUploadStatus('success');
-      setStatusMessage(`File "${file.name}" uploaded successfully!`);
+      setStatusMessage(`File "${file.name}" uploaded successfully! (${dataRows.length} rows, ${headers.length} columns)`);
       
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
