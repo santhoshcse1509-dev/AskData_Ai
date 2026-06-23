@@ -102,7 +102,7 @@ export default function DataAnalysisTool({ sessionId }: DataAnalysisToolProps) {
                       >
                         <h3 className="font-semibold text-foreground truncate">{dataset.fileName}</h3>
                         <p className="text-sm text-muted-foreground mt-1">
-                          {dataset.rowCount.toLocaleString()} rows × {dataset.columnCount} columns
+                         {dataset.rowCount?.toLocaleString() ?? '...'} rows × {dataset.columnCount ?? '...'} columns
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
                           Uploaded {new Date(dataset.uploadedAt).toLocaleDateString()}
