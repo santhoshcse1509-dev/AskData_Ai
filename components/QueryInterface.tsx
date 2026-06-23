@@ -35,6 +35,7 @@ export default function QueryInterface({ sessionId, dataset }: QueryInterfacePro
           datasetId: dataset.tableId,
           question: query,
           useCache: true,
+          rawData: dataset.rawData, // Pass parsed data for demo mode
         }),
       });
 

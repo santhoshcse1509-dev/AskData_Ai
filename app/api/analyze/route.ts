@@ -1,14 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
-import { generateSQLQuery, validateSQLQuery } from '@/lib/aws/bedrock';
-import { executeQuery, getTableSchema } from '@/lib/aws/aurora';
-import { getChatHistory, saveChatMessage } from '@/lib/aws/dynamodb';
-import { getCachedResult, cacheResult, generateQueryHash } from '@/lib/aws/redis';
 import { AnalyzeRequest, AnalyzeResponse, ChatMessage } from '@/lib/types';
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
-    const { sessionId, datasetId, question, useCache = true }: AnalyzeRequest = await req.json();
+    const { sessionId, datasetId, question, useCache = true, rawData }: AnalyzeRequest = await req.json();
 
     // Validate input
     if (!sessionId || !datasetId || !question) {
@@ -22,81 +18,91 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const resultId = uuidv4();
 
     try {
-      // Step 1: Fetch table schema
-      console.log('[v0] Fetching schema for table:', datasetId);
-      const schema = await getTableSchema(datasetId);
+      // Demo mode: Generate results based on question and raw data if available
+      console.log('[v0] Processing question in demo mode:', question);
+      
+      // Simulate AI-generated SQL
+      const mockSqlQuery = `SELECT * FROM ${datasetId} WHERE 1=1`;
+      const explanation = `This query retrieves data matching your question: "${question}"`;
 
-      if (schema.length === 0) {
-        return NextResponse.json(
-          { error: 'Table schema not found or table is empty' },
-          { status: 404 }
-        );
-      }
-
-      // Step 2: Load chat history for context
-      console.log('[v0] Loading chat history for session:', sessionId);
-      const chatHistory = await getChatHistory(sessionId, 5);
-
-      // Step 3: Generate SQL using Bedrock
-      console.log('[v0] Generating SQL query with Bedrock');
-      const bedrockResponse = await generateSQLQuery(
-        question,
-        datasetId,
-        schema,
-        chatHistory
-      );
-
-      const { sqlQuery, explanation } = bedrockResponse;
-
-      // Validate SQL query for security
-      if (!validateSQLQuery(sqlQuery)) {
-        return NextResponse.json(
-          { error: 'Generated SQL query failed security validation' },
-          { status: 400 }
-        );
-      }
-
-      // Step 4: Check Redis cache
+      // Generate mock data based on common questions
       let rows: Record<string, any>[] = [];
-      let isCached = false;
-      const queryHash = generateQueryHash(sqlQuery);
-
-      if (useCache) {
-        console.log('[v0] Checking Redis cache for query hash:', queryHash);
-        const cachedData = await getCachedResult(queryHash);
-        if (cachedData) {
-          rows = cachedData;
-          isCached = true;
-          console.log('[v0] Cache hit! Retrieved', rows.length, 'rows');
+      
+      // If raw data provided, filter it based on question keywords
+      if (rawData && rawData.length > 0) {
+        const lowerQuestion = question.toLowerCase();
+        
+        // Simple filtering based on keywords in the question
+        if (lowerQuestion.includes('top') || lowerQuestion.includes('highest') || lowerQuestion.includes('max')) {
+          // Sort by numeric columns in descending order
+          const numericCols = Object.keys(rawData[0]).filter(k => !isNaN(rawData[0][k]));
+          if (numericCols.length > 0) {
+            rows = [...rawData].sort((a, b) => b[numericCols[0]] - a[numericCols[0]]).slice(0, 5);
+          } else {
+            rows = rawData.slice(0, 5);
+          }
+        } else if (lowerQuestion.includes('count') || lowerQuestion.includes('total')) {
+          // Return count summary
+          rows = [{ metric: 'Total Rows', value: rawData.length }];
+        } else if (lowerQuestion.includes('average') || lowerQuestion.includes('mean')) {
+          // Calculate averages for numeric columns
+          const numericCols = Object.keys(rawData[0]).filter(k => !isNaN(rawData[0][k]));
+          if (numericCols.length > 0) {
+            const avg = numericCols.map(col => ({
+              column: col,
+              average: (rawData.reduce((sum, r) => sum + parseFloat(r[col] || 0), 0) / rawData.length).toFixed(2),
+            }));
+            rows = avg;
+          } else {
+            rows = rawData;
+          }
+        } else {
+          // Return first 10 rows by default
+          rows = rawData.slice(0, 10);
         }
+      } else {
+      
+      if (question.toLowerCase().includes('top') || question.toLowerCase().includes('highest')) {
+        rows = [
+          { id: 1, name: 'Record A', value: 950, category: 'Category 1', date: '2024-01-15' },
+          { id: 2, name: 'Record B', value: 880, category: 'Category 2', date: '2024-01-14' },
+          { id: 3, name: 'Record C', value: 750, category: 'Category 1', date: '2024-01-13' },
+          { id: 4, name: 'Record D', value: 620, category: 'Category 3', date: '2024-01-12' },
+          { id: 5, name: 'Record E', value: 580, category: 'Category 2', date: '2024-01-11' },
+        ];
+      } else if (question.toLowerCase().includes('average') || question.toLowerCase().includes('mean')) {
+        rows = [
+          { category: 'Category 1', average_value: 723.5, count: 8 },
+          { category: 'Category 2', average_value: 645.3, count: 12 },
+          { category: 'Category 3', average_value: 582.1, count: 6 },
+        ];
+      } else if (question.toLowerCase().includes('count') || question.toLowerCase().includes('total')) {
+        rows = [
+          { metric: 'Total Records', value: 126, category: 'Overall' },
+          { metric: 'Category 1', value: 45, category: 'Breakdown' },
+          { metric: 'Category 2', value: 52, category: 'Breakdown' },
+          { metric: 'Category 3', value: 29, category: 'Breakdown' },
+        ];
+      } else {
+        rows = [
+          { id: 1, name: 'Sample 1', value: 500, category: 'Type A', status: 'Active' },
+          { id: 2, name: 'Sample 2', value: 450, category: 'Type B', status: 'Active' },
+          { id: 3, name: 'Sample 3', value: 600, category: 'Type A', status: 'Inactive' },
+          { id: 4, name: 'Sample 4', value: 550, category: 'Type C', status: 'Active' },
+          { id: 5, name: 'Sample 5', value: 480, category: 'Type B', status: 'Active' },
+          { id: 6, name: 'Sample 6', value: 520, category: 'Type A', status: 'Active' },
+          { id: 7, name: 'Sample 7', value: 410, category: 'Type C', status: 'Inactive' },
+          { id: 8, name: 'Sample 8', value: 580, category: 'Type B', status: 'Active' },
+        ];
       }
+      } // Close else from if (rawData && rawData.length > 0)
 
-      // Step 5: Execute query if not cached
-      if (!isCached) {
-        console.log('[v0] Executing query on Aurora');
-        rows = await executeQuery(sqlQuery);
-        console.log('[v0] Query returned', rows.length, 'rows');
-
-        // Cache the results
-        await cacheResult(queryHash, rows, 86400); // 24 hour TTL
-      }
-
-      // Limit results to prevent overwhelming the UI
-      const maxRows = 10000;
-      if (rows.length > maxRows) {
-        console.log(`[v0] Limiting results from ${rows.length} to ${maxRows} rows`);
-        rows = rows.slice(0, maxRows);
-      }
-
-      // Step 6: Extract column names
-      const columns =
-        rows.length > 0
-          ? Object.keys(rows[0]).filter((key) => key !== 'id' && key !== 'created_at')
-          : schema.map((col) => col.name);
+      // Extract columns from mock data
+      const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
 
       const executionTime = Date.now() - startTime;
 
-      // Step 7: Save chat messages
+      // Step 7: Save chat messages (in demo, just log)
       const userMessage: ChatMessage = {
         id: uuidv4(),
         sessionId,
@@ -115,10 +121,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         createdAt: new Date(),
       };
 
-      await Promise.all([
-        saveChatMessage(userMessage),
-        saveChatMessage(assistantMessage),
-      ]);
+      // Demo mode: Skip saving chat history
+      console.log('[v0] Demo mode - skipping chat history save');
 
       const response: AnalyzeResponse = {
         resultId,
@@ -126,8 +130,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         columns,
         rowCount: rows.length,
         executionTime,
-        sqlQuery,
-        isCached,
+        sqlQuery: mockSqlQuery,
+        isCached: false,
         summary: explanation,
       };
 
@@ -135,17 +139,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     } catch (error) {
       console.error('[v0] Error in analyze endpoint:', error);
       
-      // Save error to chat history
-      const errorMessage: ChatMessage = {
-        id: uuidv4(),
-        sessionId,
-        type: 'assistant',
-        content: `Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}`,
-        createdAt: new Date(),
-      };
-
-      await saveChatMessage(errorMessage);
-
       return NextResponse.json(
         { error: error instanceof Error ? error.message : 'Failed to analyze query' },
         { status: 500 }

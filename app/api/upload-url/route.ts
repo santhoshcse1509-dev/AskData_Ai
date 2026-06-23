@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateUploadUrl } from '@/lib/aws/s3';
 import { S3UploadResponse } from '@/lib/types';
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -32,7 +31,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const { uploadUrl, s3Key } = await generateUploadUrl(fileName, fileType);
+    // Demo mode: Generate mock upload URL
+    const timestamp = Date.now();
+    const randomStr = Math.random().toString(36).substring(7);
+    const s3Key = `uploads/${timestamp}-${randomStr}/${fileName}`;
+    
+    // In demo mode, we'll use a data URL or simulate the upload
+    const uploadUrl = `data:${fileType};base64,`;
 
     const response: S3UploadResponse = {
       uploadUrl,

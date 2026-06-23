@@ -42,46 +42,37 @@ export default function FileUploadFlow({ sessionId, onDatasetAdded }: FileUpload
     setUploadStatus('idle');
 
     try {
-      // Step 1: Get pre-signed URL
-      const urlResponse = await fetch('/api/upload-url', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fileName: file.name,
-          fileType: file.type,
-        }),
-      });
-
-      if (!urlResponse.ok) {
-        throw new Error('Failed to get upload URL');
+      // Parse file client-side (demo mode)
+      const fileContent = await file.text();
+      const rows = fileContent.split('\n').filter(row => row.trim());
+      
+      if (rows.length === 0) {
+        throw new Error('File is empty');
       }
 
-      const urlData: S3UploadResponse = await urlResponse.json();
-
-      // Step 2: Upload to S3
-      const uploadResponse = await fetch(urlData.uploadUrl, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': file.type,
-        },
-        body: file,
+      // Parse CSV headers
+      const headers = rows[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
+      const dataRows = rows.slice(1).map(row => {
+        const values = row.split(',').map(v => v.trim().replace(/^["']|["']$/g, ''));
+        return headers.reduce((obj: Record<string, string>, header: string, idx: number) => {
+          obj[header] = values[idx] || '';
+          return obj;
+        }, {});
       });
 
-      if (!uploadResponse.ok) {
-        throw new Error('Failed to upload file to S3');
-      }
-
-      // Step 3: Create mock dataset (in production, Lambda would parse and create Aurora table)
+      // Create dataset from parsed data
+      const datasetId = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
       const mockDataset: UploadedDataset = {
-        datasetId: urlData.uploadId,
+        datasetId,
         sessionId,
         fileName: file.name,
         fileType: file.name.endsWith('.xlsx') ? 'xlsx' : 'csv',
-        tableId: urlData.uploadId.replace(/[^a-zA-Z0-9_]/g, '_'),
-        rowCount: 0, // Would be populated by Lambda
-        columnCount: 0,
-        schema: [],
+        tableId: `table_${datasetId.replace(/[^a-zA-Z0-9_]/g, '_')}`,
+        rowCount: dataRows.length,
+        columnCount: headers.length,
+        schema: headers.map(h => ({ name: h, type: 'string', nullable: true })),
         uploadedAt: new Date(),
+        rawData: dataRows, // Store parsed data for demo mode
       };
 
       onDatasetAdded(mockDataset);

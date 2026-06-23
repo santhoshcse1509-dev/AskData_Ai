@@ -13,10 +13,11 @@ export interface UploadedDataset {
   fileName: string;
   fileType: 'csv' | 'xlsx';
   tableId: string;
-  rowCount: number;
-  columnCount: number;
-  schema: ColumnSchema[];
-  uploadedAt: Date;
+  rowCount?: number;
+  columnCount?: number;
+  schema?: ColumnSchema[];
+  uploadedAt?: Date;
+  rawData?: Record<string, any>[]; // Demo mode: store parsed data
 }
 
 export interface ColumnSchema {
@@ -89,6 +90,7 @@ export interface AnalyzeRequest {
   datasetId: string;
   question: string;
   useCache?: boolean;
+  rawData?: Record<string, any>[]; // Demo mode: raw parsed data
 }
 
 export interface AnalyzeResponse {
