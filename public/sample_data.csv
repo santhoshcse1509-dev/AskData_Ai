@@ -1,0 +1,16 @@
+id,name,department,salary,hire_date,status
+1,John Smith,Sales,65000,2022-01-15,Active
+2,Sarah Johnson,Engineering,95000,2021-06-20,Active
+3,Michael Brown,Marketing,72000,2023-02-10,Active
+4,Emily Davis,Sales,68000,2022-11-05,Inactive
+5,Robert Wilson,Engineering,98000,2020-03-12,Active
+6,Jennifer Martinez,HR,58000,2023-04-08,Active
+7,David Anderson,Engineering,92000,2021-09-14,Active
+8,Lisa Garcia,Marketing,75000,2022-08-22,Active
+9,James Taylor,Sales,70000,2022-12-01,Active
+10,Maria Thomas,Engineering,96000,2019-11-30,Active
+11,William Jackson,Finance,80000,2021-05-18,Active
+12,Patricia White,Sales,66000,2023-01-09,Active
+13,Richard Harris,Engineering,94000,2020-07-25,Active
+14,Linda Martin,Marketing,73000,2022-10-11,Active
+15,Joseph Lee,HR,59000,2023-03-15,Active
