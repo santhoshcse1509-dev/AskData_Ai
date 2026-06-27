@@ -18,37 +18,42 @@ export default function DataAnalysisTool({ sessionId }: DataAnalysisToolProps) {
   const [isLoadingDatasets, setIsLoadingDatasets] = useState(false);
 
   // Load available datasets
-  useEffect(() => {
-    const loadDatasets = async () => {
-      if (!sessionId) return;
-      
-      setIsLoadingDatasets(true);
-      try {
-        const response = await fetch('/api/list-tables', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId }),
-        });
+useEffect(() => {
+  const loadDatasets = async () => {
+    if (!sessionId) return;
 
-        if (response.ok) {
-          const data = await response.json();
-          setDatasets(data.datasets || []);
-          
-          // Auto-select first dataset if available
-          if (data.datasets.length > 0 && !selectedDataset) {
-            setSelectedDataset(data.datasets[0]);
-          }
+    setIsLoadingDatasets(true);
+
+    try {
+      const response = await fetch('/api/list-tables', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ sessionId }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+
+        if (data.datasets && data.datasets.length > 0) {
+          setDatasets(data.datasets);
+
+          setSelectedDataset((prev) => {
+            if (prev) return prev;
+            return data.datasets[0];
+          });
         }
-      } catch (error) {
-        console.error('[v0] Error loading datasets:', error);
-      } finally {
-        setIsLoadingDatasets(false);
       }
-    };
+    } catch (error) {
+      console.error('[v0] Error loading datasets:', error);
+    } finally {
+      setIsLoadingDatasets(false);
+    }
+  };
 
-    loadDatasets();
-  }, [sessionId, selectedDataset]);
-
+  loadDatasets();
+}, [sessionId]);
   const handleDatasetAdded = (dataset: UploadedDataset) => {
     setDatasets((prev) => [...prev, dataset]);
     setSelectedDataset(dataset);
