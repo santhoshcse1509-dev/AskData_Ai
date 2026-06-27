@@ -1,13 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
-import { createExportJob, updateExportJobStatus } from '@/lib/aws/dynamodb';
+import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
+import { createExportJob } from '@/lib/aws/dynamodb';
 import { ExportRequest, ExportResponse, ExportJob } from '@/lib/types';
+
+ const sqs = new SQSClient({
+  region: process.env.AWS_REGION || 'ap-south-1',
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+  },
+});
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     const { resultId, format, email }: ExportRequest = await req.json();
 
-    // Validate input
     if (!resultId || !format) {
       return NextResponse.json(
         { error: 'Missing required fields: resultId, format' },
@@ -15,7 +23,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Validate format
     const validFormats = ['pdf', 'excel', 'csv', 'word'];
     if (!validFormats.includes(format)) {
       return NextResponse.json(
@@ -26,8 +33,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const jobId = uuidv4();
     const now = new Date();
-
-    console.log(`[v0] Creating export job ${jobId} for result ${resultId}`);
 
     // Create export job in DynamoDB
     const job: ExportJob = {
@@ -41,17 +46,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     await createExportJob(job);
 
-    // For now, return queued status
-    // In production, this would trigger a Lambda function for large datasets
-    // or immediately process small datasets
+    // Send job to SQS queue
+    await sqs.send(new SendMessageCommand({
+      QueueUrl: process.env.SQS_QUEUE_URL!,
+      MessageBody: JSON.stringify({
+        jobId,
+        resultId,
+        format,
+        email,
+        createdAt: now.toISOString(),
+      }),
+      MessageGroupId: 'exports',
+    }));
+
+    console.log(`[v0] Export job ${jobId} queued in SQS`);
 
     const response: ExportResponse = {
       jobId,
       status: 'queued',
-      message:
-        format === 'excel' || format === 'csv'
-          ? 'Export job queued. You will receive an email with your file shortly.'
-          : 'Export started. Your file will be ready shortly.',
+      message: 'Export job queued. You will receive an email with your file shortly.',
     };
 
     return NextResponse.json(response);
