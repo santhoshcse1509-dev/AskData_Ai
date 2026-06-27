@@ -184,7 +184,7 @@ export async function createExportJob(job: ExportJob): Promise<void> {
     const command = new PutItemCommand({
       TableName: EXPORTS_TABLE,
       Item: {
-        jobId: { S: job.jobId },
+         exportId: { S: job.jobId },
         resultId: { S: job.resultId },
         format: { S: job.format },
         status: { S: job.status },

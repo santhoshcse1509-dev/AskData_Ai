@@ -1,10 +1,13 @@
 'use client';
 
 import React, { useState } from 'react';
+import { toast } from 'sonner';
 import { Send, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { UploadedDataset, AnalyzeResponse } from '@/lib/types';
+import { Skeleton } from '@/components/ui/skeleton';
+
 import ResultsTable from './ResultsTable';
 import ExportButtons from './ExportButtons';
 
@@ -15,17 +18,19 @@ interface QueryInterfaceProps {
 
 export default function QueryInterface({ sessionId, dataset }: QueryInterfaceProps) {
   const [query, setQuery] = useState('');
+  const [queryHistory, setQueryHistory] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [results, setResults] = useState<AnalyzeResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
+  
     e.preventDefault();
     if (!query.trim()) return;
 
     setIsLoading(true);
     setError(null);
-
+      setResults(null);
     try {
       const response = await fetch('/api/analyze', {
         method: 'POST',
@@ -44,13 +49,30 @@ export default function QueryInterface({ sessionId, dataset }: QueryInterfacePro
         throw new Error(errorData.error || 'Query failed');
       }
 
-      const data: AnalyzeResponse = await response.json();
-      setResults(data);
-      setQuery('');
-    } catch (err) {
-      console.error('[v0] Query error:', err);
-      setError(err instanceof Error ? err.message : 'An error occurred');
-    } finally {
+     const data: AnalyzeResponse = await response.json();
+setError(null);
+setResults(data);
+
+console.log("Toast should appear now");
+toast.success('Query executed successfully!');
+setQueryHistory((prev) => {
+  const updated = [query, ...prev.filter((q) => q !== query)];
+  return updated.slice(0, 5);
+});
+
+setQuery('');
+    } 
+    catch (err) {
+  console.error('[v0] Query error:', err);
+
+  const message =
+    err instanceof Error ? err.message : 'An error occurred';
+
+  setError(message);
+
+  toast.error(message);
+}
+    finally {
       setIsLoading(false);
     }
   };
@@ -89,20 +111,37 @@ export default function QueryInterface({ sessionId, dataset }: QueryInterfacePro
               )}
             </Button>
           </form>
+            {queryHistory.length > 0 && (
+  <div className="mt-3 flex flex-wrap gap-2">
+    {queryHistory.map((item, index) => (
+      <button
+        key={index}
+        type="button"
+        onClick={() => setQuery(item)}
+        className="px-3 py-1 text-xs rounded-full bg-muted border border-border hover:bg-muted/80"
+      >
+        {item}
+      </button>
+    ))}
+  </div>
+)}
         </CardContent>
       </Card>
 
-      {/* Error Message */}
-      {error && (
-        <Card className="bg-red-500/10 border-red-500/50">
-          <CardContent className="pt-6">
-            <p className="text-red-700">{error}</p>
-          </CardContent>
-        </Card>
-      )}
+    
+    {/* Loading Skeleton */}
+{isLoading && (
+  <Card className="bg-card border-border">
+    <CardContent className="pt-6 space-y-4">
+      <Skeleton className="h-6 w-1/3" />
+      <Skeleton className="h-10 w-full" />
+      <Skeleton className="h-64 w-full" />
+    </CardContent>
+  </Card>
+)}
 
       {/* Results */}
-      {results && (
+      { !isLoading && results && !error && (
         <Card className="bg-card border-border">
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -132,8 +171,7 @@ export default function QueryInterface({ sessionId, dataset }: QueryInterfacePro
                   </pre>
                 </details>
               </div>
-
-              {/* Results Table */}
+                  {/* Results Table */}
               {results.rows.length > 0 ? (
                 <ResultsTable columns={results.columns} rows={results.rows} />
               ) : (
